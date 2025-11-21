@@ -1,0 +1,54 @@
+name: CI + Deploy to VPS via SSH
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run basic test
+        run: python -c "print('CI CHECK OK - Python & Flask installed')"
+
+      - name: Simulating Google Cloud Build
+        run: |
+          echo "Simulating Google Cloud Build using cloudbuild.yaml"
+          docker build -t flask-app .
+          docker images
+
+      - name: Upload project to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          source: "./"
+          target: "/home/${{ secrets.VPS_USER }}/flask-app"
+
+      - name: Run Flask App on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          script: |
+            cd flask-app
+            pkill -f main.py || true
+            nohup python3 main.py > log.txt 2>&1 &
+            echo "App running on VPS successfully!"
