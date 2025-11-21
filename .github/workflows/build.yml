@@ -40,15 +40,36 @@ jobs:
           source: "./"
           target: "/home/${{ secrets.VPS_USER }}/flask-app"
 
-      - name: Run Flask App on VPS
+      - name: Run Flask App on VPS using PM2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_SSH_PORT }}
+          script_stop: false
           script: |
             cd flask-app
-            pkill -f main.py || true
-            nohup python3 main.py > log.txt 2>&1 &
-            echo "App running on VPS successfully!"
+
+            # Instalar PM2 si no está instalado
+            if ! command -v pm2 &> /dev/null
+            then
+                echo "PM2 not found, installing..."
+                sudo apt update -y
+                sudo apt install -y nodejs npm
+                sudo npm install -g pm2
+            fi
+
+            # Eliminar cualquier proceso anterior
+            pm2 delete flask || true
+
+            # Iniciar Flask con PM2
+            pm2 start main.py --name flask --interpreter python3
+
+            # Guardar configuración de PM2 (para que sobreviva reinicios)
+            pm2 save
+
+            # Iniciar PM2 en el arranque del servidor
+            pm2 startup systemd -u ${{ secrets.VPS_USER }} --hp /home/${{ secrets.VPS_USER }}
+
+            echo "Flask app running on VPS successfully with PM2!"
